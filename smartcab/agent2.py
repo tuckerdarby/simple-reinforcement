@@ -68,7 +68,10 @@ class LearningAgent(Agent):
         # Get next state
         self.define_state()
         utility = reward + self.discount * estimate
-        self.rewards[action][old_state] += self.learner * (utility - self.q)
+        if self.location == self.planner.destination:
+            self.rewards[action][old_state] = reward
+        else:
+            self.rewards[action][old_state] += self.learner * utility# * (utility - self.q)
         self.q = self.rewards[action][self.state]
         self.log_move(reward, action, way)
 
@@ -99,6 +102,7 @@ class LearningAgent(Agent):
         #traffic = (inputs['oncoming'] != None or inputs['right'] != None or inputs['left'] != None)
         cross = (inputs['right'] != None or inputs['left'] != None)
         self.state = (inputs['light'], inputs['oncoming'], cross, self.next_waypoint)
+        self.location = self.env.agent_states[self]['location']
         #self.state = (inputs['light'], traffic, self.next_waypoint)
         #self.state = (inputs['light'], inputs['oncoming'], inputs['right'], inputs['left'], self.next_waypoint)
 
@@ -134,6 +138,7 @@ def run():
     a = e.create_agent(LearningAgent)  # create agent
     e.set_primary_agent(a, enforce_deadline=False)  # specify agent to track
     sim = Simulator(e, update_delay=0.0, display=False)
+    #sim = Simulator(e, update_delay=0.5, display=True)
     sim.run(n_trials=250)  # run for a specified number of trials
     #data
     visualize_data(['reward', 'moves', 'errors', 'acceptable', 'wrong', 'right'], a.trips)
