@@ -1,6 +1,4 @@
 import random
-import numpy as np
-import matplotlib.pyplot as plt
 import seaborn as sns
 from itertools import product
 from environment import Agent, Environment
@@ -17,22 +15,22 @@ class LearningAgent(Agent):
         self.planner = RoutePlanner(self.env, self)  # simple route planner to get next_waypoint
         # TODO: Initialize
         #parameters
-        self.learner = 0.9
-        self.discount = 0.7
+        self.learner = 0.8
+        self.discount = 0.9
         self.q = 0
         #state/action
-        self.action = None
-        self.actions = [None, 'forward', 'left', 'right']  # really just the keys to rewards
+        self.actions = [None, 'forward', 'left', 'right']
         self.rewards = {}
         self.init_states()
         self.runs = 0
         # Measurements
-        self.trips = []
-        # - must reset
-        self.errors = []
-        self.moves = 0
-        self.acceptable = 0
-        self.total_reward = 0
+        self.trips = [] #contains each trip data
+        self.errors = [] #magnitude of errors per trip
+        self.moves = 0 #number of moves per trip
+        self.correct = 0 #number of moves in the correct direction
+        self.changes = 0 #number of times position changed
+        self.acceptable = 0 #count of non-negative moves per trip
+        self.total_reward = 0 #total reward (positive and negative)
 
     def init_states(self):
         # Inputs: light, oncoming, right, left, direction
@@ -48,7 +46,7 @@ class LearningAgent(Agent):
         for action in self.actions:
             self.rewards[action] = {}
             for state in states:
-                self.rewards[action][state] = random.uniform(0, 10)
+                self.rewards[action][state] = random.uniform(-1, 0)
 
     def reset(self, destination=None):
         self.planner.route_to(destination)
@@ -56,6 +54,8 @@ class LearningAgent(Agent):
         self.total_reward = 0
         self.acceptable = 0
         self.moves = 0
+        self.correct = 0
+        self.changes = 0
         self.errors = []
 
     def update(self, t):
@@ -63,13 +63,14 @@ class LearningAgent(Agent):
         old_state = self.state
         # choose action
         action, estimate = self.best_action()
+        way = self.next_waypoint
         reward = self.env.act(self, action)
         # Get next state
         self.define_state()
         utility = reward + self.discount * estimate
         self.rewards[action][old_state] += self.learner * (utility - self.q)
         self.q = self.rewards[action][self.state]
-        self.log_move(reward)
+        self.log_move(reward, action, way)
 
     def best_action(self):
         chosen = None
@@ -101,11 +102,15 @@ class LearningAgent(Agent):
         #self.state = (inputs['light'], traffic, self.next_waypoint)
         #self.state = (inputs['light'], inputs['oncoming'], inputs['right'], inputs['left'], self.next_waypoint)
 
-    def log_move(self, reward):
+    def log_move(self, reward, action, direction):
         if reward < 0:
             self.errors.append(reward)
         else:
             self.acceptable += 1
+            if direction == action:
+                self.correct += 1
+        if action != None:
+            self.changes += 1
         self.total_reward += reward
         self.moves += 1
 
@@ -114,7 +119,9 @@ class LearningAgent(Agent):
             'reward': self.total_reward,
             'moves': self.moves,
             'errors': sum(self.errors),
-            'acceptable': self.acceptable
+            'acceptable': self.acceptable/float(max(1, self.moves)),
+            'wrong': 1.0-(self.acceptable/float(max(1, self.moves))),
+            'right': (self.correct/float(max(1, self.changes))),
         }
         self.runs += 1
         self.trips.append(trip)
@@ -127,10 +134,9 @@ def run():
     a = e.create_agent(LearningAgent)  # create agent
     e.set_primary_agent(a, enforce_deadline=False)  # specify agent to track
     sim = Simulator(e, update_delay=0.0, display=False)
-    sim.run(n_trials=1000)  # run for a specified number of trials
-
-    #data crunch
-    visualize_data(['reward', 'moves', 'errors', 'acceptable'], a.trips)
+    sim.run(n_trials=250)  # run for a specified number of trials
+    #data
+    visualize_data(['reward', 'moves', 'errors', 'acceptable', 'wrong', 'right'], a.trips)
 
 
 def visualize_data(names, data):
